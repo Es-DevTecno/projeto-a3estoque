@@ -1,0 +1,55 @@
+# Sobe o sistema inteiro: docker compose up --build
+# Escalar o estoque:     docker compose up --build --scale estoque-service=3
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: a3
+      POSTGRES_PASSWORD: a3senha
+    volumes:
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U a3"]
+      interval: 5s
+      retries: 10
+
+  auth-service:
+    build: ./services/auth-service
+    environment:
+      PORT: 3001
+      DATABASE_URL: postgres://a3:a3senha@postgres:5432/auth_db
+      JWT_SECRET: ${JWT_SECRET:-troque-este-segredo}
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  estoque-service:
+    build: ./services/estoque-service
+    environment:
+      PORT: 3002
+      DATABASE_URL: postgres://a3:a3senha@postgres:5432/estoque_db
+      JWT_SECRET: ${JWT_SECRET:-troque-este-segredo}
+    depends_on:
+      postgres: { condition: service_healthy }
+    # sem "ports": assim da pra subir varias replicas sem conflito
+
+  notificacao-worker:
+    build: ./services/notificacao-worker
+    environment:
+      DATABASE_URL: postgres://a3:a3senha@postgres:5432/estoque_db
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  gateway:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./frontend:/usr/share/nginx/html
+    depends_on:
+      - auth-service
+      - estoque-service
+
+volumes:
+  pgdata:

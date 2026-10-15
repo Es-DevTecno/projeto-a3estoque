@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>A3 Estoque | Gestão Corporativa</title>
+  <!-- Fontes e ícones -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css?family=Material+Icons|Material+Icons+Outlined" rel="stylesheet" />
+  <!-- Quasar (Vue 3) via CDN: sem build, o nginx serve direto -->
+  <link href="https://cdn.jsdelivr.net/npm/quasar@2.17.0/dist/quasar.prod.css" rel="stylesheet" />
+  <link href="css/app.css" rel="stylesheet" />
+</head>
+<body>
+<div id="q-app">
+
+  <!-- ===================== LOGIN ===================== -->
+  <div v-if="!logado" class="login-wrap">
+    <section class="login-brand">
+      <div class="brand-logo"><q-icon name="inventory_2" size="28px"></q-icon> A3 <span>Estoque</span></div>
+      <div class="brand-hero">
+        <h1>Seu estoque com a segurança<br />de um banco.</h1>
+        <p>Controle de produtos em tempo real, com microsserviços, alta disponibilidade e rastreabilidade de cada movimentação.</p>
+        <ul class="brand-features">
+          <li><q-icon name="verified_user"></q-icon> Autenticação com token e renovação automática</li>
+          <li><q-icon name="bolt"></q-icon> Pronto para muitos acessos simultâneos</li>
+          <li><q-icon name="notifications_active"></q-icon> Alertas de estoque baixo</li>
+        </ul>
+      </div>
+      <div class="brand-foot">Ambiente protegido &middot; Conexão criptografada</div>
+    </section>
+
+    <section class="login-form-area">
+      <q-card flat class="login-card">
+        <div class="text-h5 text-weight-bold text-primary q-mb-xs">{{ aba === 'entrar' ? 'Acesse sua conta' : 'Abra sua conta' }}</div>
+        <div class="text-grey-7 q-mb-lg">{{ aba === 'entrar' ? 'Informe seus dados para continuar.' : 'O primeiro cadastro do sistema vira administrador.' }}</div>
+
+        <q-tabs v-model="aba" dense align="left" active-color="secondary" indicator-color="secondary" class="text-grey-7 q-mb-lg" no-caps>
+          <q-tab name="entrar" label="Entrar"></q-tab>
+          <q-tab name="registrar" label="Criar conta"></q-tab>
+        </q-tabs>
+
+        <q-form v-if="aba === 'entrar'" @submit="entrar" class="q-gutter-md">
+          <q-input v-model="form.email" type="email" label="E-mail" outlined stack-label :rules="[v => !!v || 'Informe o e-mail']">
+            <template v-slot:prepend><q-icon name="mail_outline"></q-icon></template>
+          </q-input>
+          <q-input v-model="form.senha" :type="verSenha ? 'text' : 'password'" label="Senha" outlined stack-label :rules="[v => !!v || 'Informe a senha']">
+            <template v-slot:prepend><q-icon name="lock_outline"></q-icon></template>
+            <template v-slot:append><q-icon :name="verSenha ? 'visibility_off' : 'visibility'" class="cursor-pointer" @click="verSenha = !verSenha"></q-icon></template>
+          </q-input>
+          <q-btn type="submit" label="Entrar" color="secondary" unelevated no-caps size="lg" class="full-width btn-main" :loading="carregando"></q-btn>
+        </q-form>
+
+        <q-form v-else @submit="registrar" class="q-gutter-md">
+          <q-input v-model="form.nome" label="Nome completo" outlined stack-label :rules="[v => !!v || 'Informe o nome']">
+            <template v-slot:prepend><q-icon name="person_outline"></q-icon></template>
+          </q-input>
+          <q-input v-model="form.email" type="email" label="E-mail" outlined stack-label :rules="[v => !!v || 'Informe o e-mail']">
+            <template v-slot:prepend><q-icon name="mail_outline"></q-icon></template>
+          </q-input>
+          <q-input v-model="form.senha" type="password" label="Senha" hint="Mínimo de 6 caracteres" outlined stack-label :rules="[v => (v && v.length >= 6) || 'Mínimo 6 caracteres']">
+            <template v-slot:prepend><q-icon name="lock_outline"></q-icon></template>
+          </q-input>
+          <q-btn type="submit" label="Criar conta" color="secondary" unelevated no-caps size="lg" class="full-width btn-main" :loading="carregando"></q-btn>
+        </q-form>
+
+        <div class="secure-note"><q-icon name="shield" size="16px"></q-icon> Seus dados são protegidos com criptografia bcrypt e JWT.</div>
+      </q-card>
+    </section>
+  </div>
+
+  <!-- ===================== SISTEMA ===================== -->
+  <q-layout v-else view="lHh LpR lFf">
+    <q-header class="app-header">
+      <div class="header-stripe"></div>
+      <q-toolbar class="q-px-lg">
+        <q-btn flat round dense icon="menu" color="primary" class="lt-md" @click="menu = !menu"></q-btn>
+        <q-toolbar-title class="text-primary text-weight-bold">{{ titulos[pagina] }}</q-toolbar-title>
+        <q-btn flat round color="primary" icon="refresh" @click="carregarTudo"><q-tooltip>Atualizar</q-tooltip></q-btn>
+        <q-btn flat round color="primary" icon="notifications_none" @click="pagina = 'alertas'">
+          <q-badge v-if="notificacoes.length" color="secondary" floating>{{ notificacoes.length }}</q-badge>
+        </q-btn>
+        <q-btn flat no-caps class="q-ml-sm user-chip">
+          <q-avatar size="34px" color="primary" text-color="white">{{ iniciais }}</q-avatar>
+          <div class="q-ml-sm text-left gt-xs">
+            <div class="text-weight-semibold text-dark">{{ usuario.nome }}</div>
+            <div class="text-caption text-grey-6">{{ usuario.papel === 'admin' ? 'Administrador' : 'Operador' }}</div>
+          </div>
+          <q-menu anchor="bottom right" self="top right">
+            <q-list style="min-width: 180px">
+              <q-item clickable v-close-popup @click="sair"><q-item-section avatar><q-icon name="logout"></q-icon></q-item-section><q-item-section>Sair</q-item-section></q-item>
+            </q-list>
+          </q-menu>
+        </q-btn>
+      </q-toolbar>
+    </q-header>
+
+    <q-drawer v-model="menu" show-if-above :width="260" class="app-drawer">
+      <div class="drawer-logo"><q-icon name="inventory_2" size="26px"></q-icon> A3 <span>Estoque</span></div>
+      <q-list class="q-px-md">
+        <q-item v-for="item in navegacao" :key="item.id" clickable v-ripple :active="pagina === item.id" active-class="nav-ativo" class="nav-item" @click="pagina = item.id">
+          <q-item-section avatar><q-icon :name="item.icone"></q-icon></q-item-section>
+          <q-item-section>{{ item.nome }}</q-item-section>
+        </q-item>
+      </q-list>
+      <div class="drawer-foot">
+        <q-icon name="dns" size="14px"></q-icon> Instância: <b>{{ instancia }}</b>
+      </div>
+    </q-drawer>
+
+    <q-page-container>
+      <q-page class="q-pa-lg app-page">
+
+        <!-- PAINEL -->
+        <div v-if="pagina === 'painel'">
+          <div class="saudacao">Olá, {{ primeiroNome }} 👋</div>
+          <div class="text-grey-7 q-mb-lg">Este é o resumo do seu estoque agora.</div>
+
+          <div class="row q-col-gutter-lg q-mb-lg">
+            <div v-for="k in kpis" :key="k.titulo" class="col-12 col-sm-6 col-lg-3">
+              <q-card flat class="kpi-card">
+                <div class="kpi-icone" :class="k.cor"><q-icon :name="k.icone" size="22px"></q-icon></div>
+                <div class="kpi-titulo">{{ k.titulo }}</div>
+                <div class="kpi-valor">{{ k.valor }}</div>
+              </q-card>
+            </div>
+          </div>
+
+          <div class="row q-col-gutter-lg">
+            <div class="col-12 col-md-7">
+              <q-card flat class="painel-card">
+                <div class="painel-card-titulo">Últimas movimentações <q-btn flat dense no-caps color="secondary" label="Ver todas" @click="pagina = 'movimentacoes'"></q-btn></div>
+                <q-list separator>
+                  <q-item v-for="m in movimentacoes.slice(0, 6)" :key="m.id">
+                    <q-item-section avatar>
+                      <q-avatar size="36px" :class="m.tipo === 'ENTRADA' ? 'bg-entrada' : 'bg-saida'">
+                        <q-icon :name="m.tipo === 'ENTRADA' ? 'south_west' : 'north_east'" size="18px"></q-icon>
+                      </q-avatar>
+                    </q-item-section>
+                    <q-item-section>
+                      <q-item-label class="text-weight-medium">{{ m.produto }}</q-item-label>
+                      <q-item-label caption>{{ formatarData(m.criadoEm) }}</q-item-label>
+                    </q-item-section>
+                    <q-item-section side :class="m.tipo === 'ENTRADA' ? 'text-positive' : 'text-negative'" class="text-weight-bold">
+                      {{ m.tipo === 'ENTRADA' ? '+' : '−' }}{{ m.quantidade }}
+                    </q-item-section>
+                  </q-item>
+                  <q-item v-if="!movimentacoes.length"><q-item-section class="text-grey-6">Nenhuma movimentação ainda.</q-item-section></q-item>
+                </q-list>
+              </q-card>
+            </div>
+            <div class="col-12 col-md-5">
+              <q-card flat class="painel-card">
+                <div class="painel-card-titulo">Atenção ao estoque</div>
+                <q-list separator>
+                  <q-item v-for="p in abaixoMinimo" :key="p.id">
+                    <q-item-section avatar><q-icon name="warning_amber" color="warning"></q-icon></q-item-section>
+                    <q-item-section>
+                      <q-item-label class="text-weight-medium">{{ p.nome }}</q-item-label>
+                      <q-item-label caption>{{ p.quantidade }} un. · mínimo {{ p.estoqueMinimo }}</q-item-label>
+                    </q-item-section>
+                    <q-item-section side><q-btn flat dense no-caps color="secondary" label="Repor" @click="abrirMovimento(p, 'ENTRADA')"></q-btn></q-item-section>
+                  </q-item>
+                  <q-item v-if="!abaixoMinimo.length"><q-item-section class="text-grey-6"><div><q-icon name="check_circle" color="positive"></q-icon> Tudo em ordem.</div></q-item-section></q-item>
+                </q-list>
+              </q-card>
+            </div>
+          </div>
+        </div>
+
+        <!-- PRODUTOS -->
+        <div v-if="pagina === 'produtos'">
+          <q-card flat class="painel-card">
+            <q-table :rows="produtos" :columns="colunasProdutos" row-key="id" flat :filter="busca" :pagination="{ rowsPerPage: 10 }" no-data-label="Nenhum produto cadastrado" class="tabela">
+              <template v-slot:top>
+                <div class="painel-card-titulo q-mb-none">Produtos</div>
+                <q-space></q-space>
+                <q-input v-model="busca" dense outlined placeholder="Buscar produto ou SKU" class="busca q-mr-md">
+                  <template v-slot:prepend><q-icon name="search"></q-icon></template>
+                </q-input>
+                <q-btn v-if="ehAdmin" color="secondary" unelevated no-caps icon="add" label="Novo produto" @click="dialogProduto = true"></q-btn>
+              </template>
+              <template v-slot:body-cell-status="props">
+                <q-td :props="props">
+                  <q-chip dense square :class="props.row.quantidade <= props.row.estoqueMinimo ? 'chip-baixo' : 'chip-ok'">
+                    {{ props.row.quantidade === 0 ? 'Esgotado' : props.row.quantidade <= props.row.estoqueMinimo ? 'Estoque baixo' : 'Disponível' }}
+                  </q-chip>
+                </q-td>
+              </template>
+              <template v-slot:body-cell-acoes="props">
+                <q-td :props="props">
+                  <q-btn flat dense round color="positive" icon="add_circle_outline" @click="abrirMovimento(props.row, 'ENTRADA')"><q-tooltip>Entrada</q-tooltip></q-btn>
+                  <q-btn flat dense round color="negative" icon="remove_circle_outline" @click="abrirMovimento(props.row, 'SAIDA')"><q-tooltip>Saída</q-tooltip></q-btn>
+                </q-td>
+              </template>
+            </q-table>
+          </q-card>
+        </div>
+
+        <!-- MOVIMENTAÇÕES -->
+        <div v-if="pagina === 'movimentacoes'">
+          <q-card flat class="painel-card">
+            <q-table title="Histórico de movimentações" :rows="movimentacoes" :columns="colunasMov" row-key="id" flat :pagination="{ rowsPerPage: 15 }" no-data-label="Nenhuma movimentação" class="tabela">
+              <template v-slot:body-cell-tipo="props">
+                <q-td :props="props">
+                  <q-chip dense square :class="props.row.tipo === 'ENTRADA' ? 'chip-ok' : 'chip-saida'">{{ props.row.tipo === 'ENTRADA' ? 'Entrada' : 'Saída' }}</q-chip>
+                </q-td>
+              </template>
+            </q-table>
+          </q-card>
+        </div>
+
+        <!-- ALERTAS -->
+        <div v-if="pagina === 'alertas'">
+          <q-card flat class="painel-card">
+            <div class="painel-card-titulo">Alertas gerados pela mensageria</div>
+            <q-list separator>
+              <q-item v-for="n in notificacoes" :key="n.id">
+                <q-item-section avatar><q-avatar size="36px" class="bg-alerta"><q-icon name="notifications_active" size="18px"></q-icon></q-avatar></q-item-section>
+                <q-item-section>
+                  <q-item-label>{{ n.mensagem }}</q-item-label>
+                  <q-item-label caption>{{ formatarData(n.criadoEm) }}</q-item-label>
+                </q-item-section>
+              </q-item>
+              <q-item v-if="!notificacoes.length"><q-item-section class="text-grey-6">Nenhum alerta.</q-item-section></q-item>
+            </q-list>
+          </q-card>
+        </div>
+
+      </q-page>
+    </q-page-container>
+
+    <!-- Dialog: movimentar -->
+    <q-dialog v-model="dialogMov.aberto">
+      <q-card class="dialog-card">
+        <q-card-section>
+          <div class="text-h6 text-weight-bold text-primary">{{ dialogMov.tipo === 'ENTRADA' ? 'Registrar entrada' : 'Registrar saída' }}</div>
+          <div class="text-grey-7">{{ dialogMov.produto && dialogMov.produto.nome }} · saldo atual {{ dialogMov.produto && dialogMov.produto.quantidade }} un.</div>
+        </q-card-section>
+        <q-card-section>
+          <q-input v-model.number="dialogMov.quantidade" type="number" min="1" label="Quantidade" outlined autofocus></q-input>
+        </q-card-section>
+        <q-card-actions align="right" class="q-pa-md">
+          <q-btn flat no-caps label="Cancelar" v-close-popup></q-btn>
+          <q-btn unelevated no-caps :color="dialogMov.tipo === 'ENTRADA' ? 'positive' : 'negative'" label="Confirmar" :loading="carregando" @click="confirmarMovimento"></q-btn>
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <!-- Dialog: novo produto -->
+    <q-dialog v-model="dialogProduto">
+      <q-card class="dialog-card">
+        <q-card-section><div class="text-h6 text-weight-bold text-primary">Novo produto</div></q-card-section>
+        <q-form @submit="criarProduto">
+          <q-card-section class="q-gutter-md">
+            <q-input v-model="novo.nome" label="Nome" outlined :rules="[v => !!v || 'Obrigatório']"></q-input>
+            <q-input v-model="novo.sku" label="SKU (código)" outlined :rules="[v => !!v || 'Obrigatório']"></q-input>
+            <div class="row q-col-gutter-md">
+              <div class="col-6"><q-input v-model.number="novo.quantidade" type="number" min="0" label="Qtd inicial" outlined></q-input></div>
+              <div class="col-6"><q-input v-model.number="novo.estoqueMinimo" type="number" min="0" label="Estoque mínimo" outlined></q-input></div>
+            </div>
+          </q-card-section>
+          <q-card-actions align="right" class="q-pa-md">
+            <q-btn flat no-caps label="Cancelar" v-close-popup></q-btn>
+            <q-btn type="submit" unelevated no-caps color="secondary" label="Cadastrar" :loading="carregando"></q-btn>
+          </q-card-actions>
+        </q-form>
+      </q-card>
+    </q-dialog>
+  </q-layout>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/quasar@2.17.0/dist/quasar.umd.prod.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/quasar@2.17.0/dist/lang/pt-BR.umd.prod.js"></script>
+<script src="js/ApiClient.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
