@@ -19,6 +19,21 @@ class AuthController {
     try { res.json(await this.service.renovar(req.body.refreshToken)); }
     catch (e) { next(e); }
   };
+
+  eu = async (req, res, next) => {
+    try { res.json(await this.service.perfil(req.usuario.id)); }
+    catch (e) { next(e); }
+  };
+
+  listarUsuarios = async (req, res, next) => {
+    try { res.json(await this.service.listarUsuarios()); }
+    catch (e) { next(e); }
+  };
+
+  alterarPapel = async (req, res, next) => {
+    try { res.json(await this.service.alterarPapel(req.params.id, req.body.papel)); }
+    catch (e) { next(e); }
+  };
 }
 
 module.exports = AuthController;

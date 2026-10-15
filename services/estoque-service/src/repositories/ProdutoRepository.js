@@ -38,7 +38,7 @@ class ProdutoRepository {
 
   async listarMovimentacoes(limite = 50) {
     const { rows } = await this.db.query(
-      `SELECT m.id, m.tipo, m.quantidade, m.usuario_id AS "usuarioId", to_char(m.criado_em AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "criadoEm",
+      `SELECT m.id, m.tipo, m.quantidade, m.usuario_id AS "usuarioId", m.usuario_nome AS "usuarioNome", to_char(m.criado_em AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS "criadoEm",
               p.nome AS produto, p.sku
          FROM movimentacoes m JOIN produtos p ON p.id = m.produto_id
         ORDER BY m.id DESC LIMIT $1`, [limite]);
@@ -51,10 +51,10 @@ class ProdutoRepository {
     return rows;
   }
 
-  async registrarMovimentacao({ produtoId, tipo, quantidade, usuarioId }, client) {
+  async registrarMovimentacao({ produtoId, tipo, quantidade, usuarioId, usuarioNome = null }, client) {
     await client.query(
-      'INSERT INTO movimentacoes (produto_id, tipo, quantidade, usuario_id) VALUES ($1, $2, $3, $4)',
-      [produtoId, tipo, quantidade, usuarioId]
+      'INSERT INTO movimentacoes (produto_id, tipo, quantidade, usuario_id, usuario_nome) VALUES ($1, $2, $3, $4, $5)',
+      [produtoId, tipo, quantidade, String(usuarioId), usuarioNome]
     );
   }
 }

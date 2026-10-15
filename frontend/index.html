@@ -23,7 +23,7 @@
         <h1>Seu estoque com a segurança<br />de um banco.</h1>
         <p>Controle de produtos em tempo real, com microsserviços, alta disponibilidade e rastreabilidade de cada movimentação.</p>
         <ul class="brand-features">
-          <li><q-icon name="verified_user"></q-icon> Autenticação com token e renovação automática</li>
+          <li><q-icon name="verified_user"></q-icon> Login com Firebase Authentication</li>
           <li><q-icon name="bolt"></q-icon> Pronto para muitos acessos simultâneos</li>
           <li><q-icon name="notifications_active"></q-icon> Alertas de estoque baixo</li>
         </ul>
@@ -65,7 +65,7 @@
           <q-btn type="submit" label="Criar conta" color="secondary" unelevated no-caps size="lg" class="full-width btn-main" :loading="carregando"></q-btn>
         </q-form>
 
-        <div class="secure-note"><q-icon name="shield" size="16px"></q-icon> Seus dados são protegidos com criptografia bcrypt e JWT.</div>
+        <div class="secure-note"><q-icon name="shield" size="16px"></q-icon> Login protegido pelo Firebase Authentication (Google).</div>
       </q-card>
     </section>
   </div>
@@ -99,7 +99,7 @@
     <q-drawer v-model="menu" show-if-above :width="260" class="app-drawer">
       <div class="drawer-logo"><q-icon name="inventory_2" size="26px"></q-icon> A3 <span>Estoque</span></div>
       <q-list class="q-px-md">
-        <q-item v-for="item in navegacao" :key="item.id" clickable v-ripple :active="pagina === item.id" active-class="nav-ativo" class="nav-item" @click="pagina = item.id">
+        <q-item v-for="item in menuVisivel" :key="item.id" clickable v-ripple :active="pagina === item.id" active-class="nav-ativo" class="nav-item" @click="pagina = item.id">
           <q-item-section avatar><q-icon :name="item.icone"></q-icon></q-item-section>
           <q-item-section>{{ item.nome }}</q-item-section>
         </q-item>
@@ -225,6 +225,21 @@
               </q-item>
               <q-item v-if="!notificacoes.length"><q-item-section class="text-grey-6">Nenhum alerta.</q-item-section></q-item>
             </q-list>
+          </q-card>
+        </div>
+
+        <!-- USUÁRIOS (só admin, dados vindos do Firestore) -->
+        <div v-if="pagina === 'usuarios' && ehAdmin">
+          <q-card flat class="painel-card">
+            <q-table title="Usuários do sistema" :rows="usuarios" :columns="colunasUsuarios" row-key="id" flat :pagination="{ rowsPerPage: 15 }" no-data-label="Nenhum usuário" class="tabela">
+              <template v-slot:body-cell-papel="props">
+                <q-td :props="props">
+                  <q-btn-toggle :model-value="props.row.papel" @update:model-value="v => mudarPapel(props.row, v)" :disable="props.row.id === usuario.id"
+                    dense no-caps unelevated toggle-color="primary" color="grey-2" text-color="grey-8"
+                    :options="[{ label: 'Operador', value: 'operador' }, { label: 'Admin', value: 'admin' }]"></q-btn-toggle>
+                </q-td>
+              </template>
+            </q-table>
           </q-card>
         </div>
 

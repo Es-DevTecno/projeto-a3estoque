@@ -1,33 +1,36 @@
-const fs = require('fs');
-const path = require('path');
 const os = require('os');
 const express = require('express');
 
-const Database = require('./config/Database');
+const Firebase = require('./config/Firebase');
 const UsuarioRepository = require('./repositories/UsuarioRepository');
+const FirebaseAuthGateway = require('./services/FirebaseAuthGateway');
 const AuthService = require('./services/AuthService');
 const AuthController = require('./controllers/AuthController');
 const authRoutes = require('./routes/authRoutes');
+const { criarAutenticador } = require('./middlewares/autenticar');
 const tratarErros = require('./middlewares/tratarErros');
 
-async function main() {
-  const db = Database.get();
-  await db.aguardarConexao();
-  await db.query(fs.readFileSync(path.join(__dirname, 'db/schema.sql'), 'utf8'));
-
-  // Montagem das camadas: Repository -> Service -> Controller -> Rotas
-  const repo = new UsuarioRepository(db);
-  const service = new AuthService(repo, process.env.JWT_SECRET);
+/** Monta o app recebendo as dependencias (facilita testar com objetos falsos). */
+function criarApp({ firebaseAuth, usuarioRepository, authGateway }) {
+  const service = new AuthService({ firebaseAuth, usuarioRepository, authGateway });
   const controller = new AuthController(service);
 
   const app = express();
   app.use(express.json());
   app.get('/health', (req, res) => res.json({ status: 'ok', servico: 'auth', instancia: os.hostname() }));
-  app.use('/', authRoutes(controller));
+  app.use('/', authRoutes(controller, criarAutenticador(firebaseAuth)));
   app.use(tratarErros);
-
-  const porta = process.env.PORT || 3001;
-  app.listen(porta, () => console.log(`auth-service ouvindo na porta ${porta}`));
+  return app;
 }
 
-main().catch(err => { console.error(err); process.exit(1); });
+if (require.main === module) {
+  const app = criarApp({
+    firebaseAuth: Firebase.auth(),
+    usuarioRepository: new UsuarioRepository(Firebase.firestore()),
+    authGateway: new FirebaseAuthGateway(process.env.FIREBASE_API_KEY),
+  });
+  const porta = process.env.PORT || 3001;
+  app.listen(porta, () => console.log(`auth-service (Firebase) ouvindo na porta ${porta}`));
+}
+
+module.exports = { criarApp };

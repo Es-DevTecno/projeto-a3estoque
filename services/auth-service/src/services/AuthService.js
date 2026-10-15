@@ -1,56 +1,84 @@
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
-const { AppError, NaoAutorizadoError, ConflitoError } = require('../errors/AppError');
+const { AppError, ConflitoError, NaoAutorizadoError, NaoEncontradoError } = require('../errors/AppError');
 
 /**
- * Regras de negocio de autenticacao.
- * Recebe o repository pelo construtor (injecao de dependencia),
- * entao nao sabe nada de SQL, e fica facil de testar.
+ * Regras de negocio do login.
+ * - Quem guarda e confere a SENHA e o Firebase Authentication.
+ * - O PERFIL (nome, papel) fica no Firestore.
+ * - O papel tambem vai dentro do token (custom claim), assim o
+ *   estoque-service descobre se e admin sem consultar este servico.
  */
 class AuthService {
-  constructor(usuarioRepository, jwtSecret) {
-    this.repo = usuarioRepository;
-    this.jwtSecret = jwtSecret;
+  constructor({ firebaseAuth, usuarioRepository, authGateway }) {
+    this.firebaseAuth = firebaseAuth;     // firebase-admin auth()
+    this.repo = usuarioRepository;        // Firestore
+    this.gateway = authGateway;           // API REST de login
   }
 
   async registrar({ nome, email, senha }) {
     if (!nome || !email || !senha) throw new AppError('nome, email e senha sao obrigatorios');
     if (senha.length < 6) throw new AppError('A senha precisa ter pelo menos 6 caracteres');
-    if (await this.repo.buscarPorEmail(email)) throw new ConflitoError('E-mail ja cadastrado');
 
-    // O primeiro usuario do sistema vira admin (pratico para a demonstracao).
-    const papel = (await this.repo.contar()) === 0 ? 'admin' : 'operador';
-    const senhaHash = await bcrypt.hash(senha, 10);
-    return this.repo.criar({ nome, email, senhaHash, papel });
+    let conta;
+    try {
+      conta = await this.firebaseAuth.createUser({ email, password: senha, displayName: nome });
+    } catch (e) {
+      if (e.code === 'auth/email-already-exists') throw new ConflitoError('E-mail ja cadastrado');
+      if (e.code === 'auth/invalid-email') throw new AppError('E-mail invalido');
+      throw e;
+    }
+
+    try {
+      const usuario = await this.repo.criarPerfil({ id: conta.uid, nome, email });
+      await this.firebaseAuth.setCustomUserClaims(conta.uid, { papel: usuario.papel });
+      return usuario;
+    } catch (e) {
+      // Compensacao: se o perfil falhou, desfaz a conta para nao ficar "meio cadastrado".
+      await this.firebaseAuth.deleteUser(conta.uid).catch(() => {});
+      throw e;
+    }
   }
 
   async login({ email, senha }) {
-    const usuario = await this.repo.buscarPorEmail(email || '');
-    if (!usuario || !(await bcrypt.compare(senha || '', usuario.senhaHash))) {
-      throw new NaoAutorizadoError('E-mail ou senha invalidos');
+    if (!email || !senha) throw new NaoAutorizadoError('E-mail ou senha invalidos');
+    let sessao = await this.gateway.entrar(email, senha);
+    let usuario = await this.repo.buscarPorId(sessao.uid);
+    if (!usuario) {
+      // Conta criada direto no Console do Firebase: cria o perfil agora
+      // e entra de novo para o token ja vir com o papel.
+      usuario = await this.#criarPerfilFaltante(sessao.uid);
+      sessao = await this.gateway.entrar(email, senha);
     }
-    return this.#gerarTokens(usuario);
+    return { accessToken: sessao.idToken, refreshToken: sessao.refreshToken, usuario };
   }
 
   async renovar(refreshToken) {
-    const usuarioId = await this.repo.consumirRefreshToken(refreshToken || '');
-    if (!usuarioId) throw new NaoAutorizadoError('Refresh token invalido ou expirado');
-    const usuario = await this.repo.buscarPorId(usuarioId);
-    return this.#gerarTokens(usuario);
+    if (!refreshToken) throw new NaoAutorizadoError('Refresh token ausente');
+    const sessao = await this.gateway.renovar(refreshToken);
+    const usuario = await this.repo.buscarPorId(sessao.uid);
+    return { accessToken: sessao.idToken, refreshToken: sessao.refreshToken, usuario };
   }
 
-  /** Metodo privado: access token curto (15 min) + refresh token longo (7 dias). */
-  async #gerarTokens(usuario) {
-    const accessToken = jwt.sign(
-      { sub: usuario.id, nome: usuario.nome, papel: usuario.papel },
-      this.jwtSecret,
-      { expiresIn: '15m' }
-    );
-    const refreshToken = crypto.randomBytes(40).toString('hex');
-    const expira = new Date(Date.now() + 7 * 24 * 3600 * 1000);
-    await this.repo.salvarRefreshToken(refreshToken, usuario.id, expira);
-    return { accessToken, refreshToken, usuario };
+  async perfil(uid) {
+    const usuario = await this.repo.buscarPorId(uid);
+    if (!usuario) throw new NaoEncontradoError('Perfil nao encontrado');
+    return usuario;
+  }
+
+  async #criarPerfilFaltante(uid) {
+    const conta = await this.firebaseAuth.getUser(uid);
+    const nome = conta.displayName || conta.email.split('@')[0];
+    const usuario = await this.repo.criarPerfil({ id: uid, nome, email: conta.email });
+    await this.firebaseAuth.setCustomUserClaims(uid, { papel: usuario.papel });
+    return usuario;
+  }
+
+  listarUsuarios() { return this.repo.listar(); }
+
+  async alterarPapel(uid, papel) {
+    if (!['admin', 'operador'].includes(papel)) throw new AppError('papel deve ser admin ou operador');
+    if (!(await this.repo.buscarPorId(uid))) throw new NaoEncontradoError('Usuario nao encontrado');
+    await this.firebaseAuth.setCustomUserClaims(uid, { papel });
+    return this.repo.alterarPapel(uid, papel); // vale no proximo login/renovacao do usuario
   }
 }
 

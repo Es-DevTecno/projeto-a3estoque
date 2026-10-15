@@ -28,7 +28,7 @@ class EstoqueService {
    * 4. na mesma transacao: registra a movimentacao e publica o evento no outbox
    * Se der conflito, tenta de novo (ate MAX_TENTATIVAS).
    */
-  async movimentar({ produtoId, tipo, quantidade, usuarioId }) {
+  async movimentar({ produtoId, tipo, quantidade, usuarioId, usuarioNome }) {
     if (!Object.values(TipoMovimentacao).includes(tipo)) throw new AppError('tipo deve ser ENTRADA ou SAIDA');
 
     for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
@@ -42,7 +42,7 @@ class EstoqueService {
         const gravou = await this.produtos.atualizarQuantidade(produto, client);
         if (!gravou) return null; // conflito: alguem atualizou antes, vamos repetir
 
-        await this.produtos.registrarMovimentacao({ produtoId, tipo, quantidade, usuarioId }, client);
+        await this.produtos.registrarMovimentacao({ produtoId, tipo, quantidade, usuarioId, usuarioNome }, client);
         await this.outbox.publicar('EstoqueMovimentado', { produtoId, tipo, quantidade, usuarioId, saldo: produto.quantidade }, client);
         if (produto.estaAbaixoDoMinimo()) {
           await this.outbox.publicar('EstoqueBaixo', { produtoId, nome: produto.nome, saldo: produto.quantidade, minimo: produto.estoqueMinimo }, client);

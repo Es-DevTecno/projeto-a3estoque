@@ -1,47 +1,46 @@
 const Usuario = require('../models/Usuario');
 
-/** Repository: unica classe que conversa com a tabela "usuarios". */
+/**
+ * Acesso ao Firestore (banco NoSQL na nuvem, separado do banco do estoque).
+ *   usuarios/{uid}         -> perfil (nome, email, papel)
+ *   sistema/contadores     -> { usuarios: N } para saber quem e o primeiro
+ */
 class UsuarioRepository {
-  constructor(db) { this.db = db; }
+  constructor(firestore) {
+    this.db = firestore;
+    this.colecao = firestore.collection('usuarios');
+    this.contador = firestore.collection('sistema').doc('contadores');
+  }
 
-  async buscarPorEmail(email) {
-    const { rows } = await this.db.query('SELECT * FROM usuarios WHERE email = $1', [email]);
-    return rows[0] ? new Usuario(rows[0]) : null;
+  /**
+   * Cria o perfil numa TRANSACAO: le o contador e grava o usuario juntos.
+   * Se dois cadastros chegarem ao mesmo tempo, o Firestore repete um deles,
+   * entao so existe UM admin (concorrencia tratada tambem aqui).
+   */
+  async criarPerfil({ id, nome, email }) {
+    return this.db.runTransaction(async (t) => {
+      const snap = await t.get(this.contador);
+      const total = snap.exists ? snap.data().usuarios || 0 : 0;
+      const usuario = new Usuario({ id, nome, email, papel: total === 0 ? 'admin' : 'operador' });
+      t.set(this.contador, { usuarios: total + 1 }, { merge: true });
+      t.set(this.colecao.doc(id), usuario.paraFirestore());
+      return usuario;
+    });
   }
 
   async buscarPorId(id) {
-    const { rows } = await this.db.query('SELECT * FROM usuarios WHERE id = $1', [id]);
-    return rows[0] ? new Usuario(rows[0]) : null;
+    const doc = await this.colecao.doc(id).get();
+    return doc.exists ? Usuario.deFirestore(doc) : null;
   }
 
-  async contar() {
-    const { rows } = await this.db.query('SELECT COUNT(*)::int AS total FROM usuarios');
-    return rows[0].total;
+  async listar() {
+    const snap = await this.colecao.orderBy('criadoEm').get();
+    return snap.docs.map(Usuario.deFirestore);
   }
 
-  async criar({ nome, email, senhaHash, papel }) {
-    const { rows } = await this.db.query(
-      `INSERT INTO usuarios (nome, email, senha_hash, papel)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [nome, email, senhaHash, papel]
-    );
-    return new Usuario(rows[0]);
-  }
-
-  async salvarRefreshToken(token, usuarioId, expiraEm) {
-    await this.db.query(
-      'INSERT INTO refresh_tokens (token, usuario_id, expira_em) VALUES ($1, $2, $3)',
-      [token, usuarioId, expiraEm]
-    );
-  }
-
-  /** Consome (apaga) o refresh token e devolve o dono, se for valido. */
-  async consumirRefreshToken(token) {
-    const { rows } = await this.db.query(
-      'DELETE FROM refresh_tokens WHERE token = $1 AND expira_em > NOW() RETURNING usuario_id',
-      [token]
-    );
-    return rows[0] ? rows[0].usuario_id : null;
+  async alterarPapel(id, papel) {
+    await this.colecao.doc(id).update({ papel });
+    return this.buscarPorId(id);
   }
 }
 

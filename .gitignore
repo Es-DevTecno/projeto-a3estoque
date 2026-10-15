@@ -1,2 +1,6 @@
 node_modules/
 .env
+# NUNCA suba a chave do Firebase para o GitHub (o repositorio e publico)
+firebase/service-account.json
+firebase/*.json
+!firebase/LEIA-ME.md

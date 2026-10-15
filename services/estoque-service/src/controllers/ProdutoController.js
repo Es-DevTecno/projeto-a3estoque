@@ -24,6 +24,7 @@ class ProdutoController {
         tipo: req.body.tipo,
         quantidade: Number(req.body.quantidade),
         usuarioId: req.usuario.id,
+        usuarioNome: req.usuario.nome,
       });
       res.json(produto);
     } catch (e) { next(e); }

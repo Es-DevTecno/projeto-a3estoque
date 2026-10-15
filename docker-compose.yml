@@ -14,21 +14,24 @@ services:
       interval: 5s
       retries: 10
 
+  # Login: usa Firebase Authentication (senhas) + Firestore (perfis).
+  # Precisa do arquivo firebase/service-account.json e do .env (veja o README).
   auth-service:
     build: ./services/auth-service
     environment:
       PORT: 3001
-      DATABASE_URL: postgres://a3:a3senha@postgres:5432/auth_db
-      JWT_SECRET: ${JWT_SECRET:-troque-este-segredo}
-    depends_on:
-      postgres: { condition: service_healthy }
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:?Crie o arquivo .env (copie do .env.example)}
+      FIREBASE_API_KEY: ${FIREBASE_API_KEY:?Coloque FIREBASE_API_KEY no .env}
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase.json
+    volumes:
+      - ./firebase/service-account.json:/run/secrets/firebase.json:ro
 
   estoque-service:
     build: ./services/estoque-service
     environment:
       PORT: 3002
       DATABASE_URL: postgres://a3:a3senha@postgres:5432/estoque_db
-      JWT_SECRET: ${JWT_SECRET:-troque-este-segredo}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}   # so para conferir o token
     depends_on:
       postgres: { condition: service_healthy }
     # sem "ports": assim da pra subir varias replicas sem conflito

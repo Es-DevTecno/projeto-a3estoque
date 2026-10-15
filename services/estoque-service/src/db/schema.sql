@@ -13,9 +13,14 @@ CREATE TABLE IF NOT EXISTS movimentacoes (
   produto_id  INT NOT NULL REFERENCES produtos(id),
   tipo        VARCHAR(10) NOT NULL CHECK (tipo IN ('ENTRADA', 'SAIDA')),
   quantidade  INT NOT NULL CHECK (quantidade > 0),
-  usuario_id  INT NOT NULL,
+  usuario_id  VARCHAR(128) NOT NULL,          -- uid do Firebase
+  usuario_nome VARCHAR(120),
   criado_em   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Ajuste para bancos criados na versao antiga (id numerico)
+ALTER TABLE movimentacoes ALTER COLUMN usuario_id TYPE VARCHAR(128);
+ALTER TABLE movimentacoes ADD COLUMN IF NOT EXISTS usuario_nome VARCHAR(120);
 
 -- MENSAGERIA VIA BANCO (Outbox Pattern):
 -- o evento e gravado na MESMA transacao da movimentacao,

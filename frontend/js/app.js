@@ -22,6 +22,7 @@ const app = createApp({
     const movimentacoes = ref([]);
     const notificacoes = ref([]);
     const instancia = ref('-');
+    const usuarios = ref([]);
 
     const dialogProduto = ref(false);
     const novo = reactive({ nome: '', sku: '', quantidade: 0, estoqueMinimo: 5 });
@@ -32,8 +33,9 @@ const app = createApp({
       { id: 'produtos', nome: 'Produtos', icone: 'inventory_2' },
       { id: 'movimentacoes', nome: 'Movimentações', icone: 'swap_horiz' },
       { id: 'alertas', nome: 'Alertas', icone: 'notifications_none' },
+      { id: 'usuarios', nome: 'Usuários', icone: 'group', soAdmin: true },
     ];
-    const titulos = { painel: 'Painel', produtos: 'Produtos', movimentacoes: 'Movimentações', alertas: 'Alertas' };
+    const titulos = { painel: 'Painel', produtos: 'Produtos', movimentacoes: 'Movimentações', alertas: 'Alertas', usuarios: 'Usuários' };
 
     const colunasProdutos = [
       { name: 'nome', label: 'Produto', field: 'nome', align: 'left', sortable: true },
@@ -49,10 +51,18 @@ const app = createApp({
       { name: 'sku', label: 'SKU', field: 'sku', align: 'left' },
       { name: 'tipo', label: 'Tipo', field: 'tipo', align: 'left' },
       { name: 'quantidade', label: 'Quantidade', field: 'quantidade', align: 'right' },
+      { name: 'usuarioNome', label: 'Responsável', field: 'usuarioNome', align: 'left' },
+    ];
+    const colunasUsuarios = [
+      { name: 'nome', label: 'Nome', field: 'nome', align: 'left', sortable: true },
+      { name: 'email', label: 'E-mail', field: 'email', align: 'left', sortable: true },
+      { name: 'criadoEm', label: 'Cadastro', field: 'criadoEm', align: 'left', format: v => formatarData(v) },
+      { name: 'papel', label: 'Perfil', field: 'papel', align: 'left' },
     ];
 
     // ---------- derivados ----------
     const ehAdmin = computed(() => usuario.value.papel === 'admin');
+    const menuVisivel = computed(() => navegacao.filter(i => !i.soAdmin || ehAdmin.value));
     const primeiroNome = computed(() => (usuario.value.nome || '').split(' ')[0]);
     const iniciais = computed(() => (usuario.value.nome || '?').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase());
     const abaixoMinimo = computed(() => produtos.value.filter(p => p.quantidade <= p.estoqueMinimo));
@@ -108,6 +118,7 @@ const app = createApp({
         const [p, m, n] = await Promise.all([api.listarProdutos(), api.listarMovimentacoes(), api.listarNotificacoes()]);
         produtos.value = p; movimentacoes.value = m; notificacoes.value = n;
         instancia.value = api.ultimaInstancia || '-';
+        if (ehAdmin.value) usuarios.value = await api.listarUsuarios();
       } catch (e) {
         avisar(e.message, 'negative');
         if (!api.logado) sair();
@@ -142,11 +153,19 @@ const app = createApp({
       finally { carregando.value = false; }
     }
 
+    async function mudarPapel(u, papel) {
+      try {
+        await api.alterarPapel(u.id, papel);
+        u.papel = papel;
+        avisar(`${u.nome} agora é ${papel === 'admin' ? 'administrador' : 'operador'} (vale no próximo login)`);
+      } catch (e) { avisar(e.message, 'negative'); }
+    }
+
     onMounted(() => { if (logado.value) carregarTudo(); });
 
     return {
       logado, usuario, aba, verSenha, carregando, form, menu, pagina, busca,
-      produtos, movimentacoes, notificacoes, instancia, dialogProduto, novo, dialogMov,
+      produtos, movimentacoes, notificacoes, instancia, usuarios, colunasUsuarios, menuVisivel, mudarPapel, dialogProduto, novo, dialogMov,
       navegacao, titulos, colunasProdutos, colunasMov,
       ehAdmin, primeiroNome, iniciais, abaixoMinimo, kpis,
       formatarData, entrar, registrar, sair, carregarTudo, abrirMovimento, confirmarMovimento, criarProduto,

@@ -1,9 +1,12 @@
 /**
  * Classe que centraliza as chamadas a API (tambem orientada a objetos no front).
- * Guarda os tokens e renova o access token sozinha quando ele expira.
+ * Guarda os tokens (gerados pelo Firebase Authentication via auth-service)
+ * e renova o token sozinha quando ele expira (1 hora).
  */
 class ApiClient {
-  constructor(baseUrl = '/api') {
+  // Aberto pelo gateway (http://localhost:8080) usa '/api'.
+  // Aberto direto do arquivo (file://) aponta pro gateway e usa CORS.
+  constructor(baseUrl = location.protocol === 'file:' ? 'http://localhost:8080/api' : '/api') {
     this.baseUrl = baseUrl;
     this.accessToken = localStorage.getItem('accessToken');
     this.refreshToken = localStorage.getItem('refreshToken');
@@ -55,6 +58,9 @@ class ApiClient {
   // Atalhos
   login(email, senha)      { return this.requisitar('/auth/login', { metodo: 'POST', corpo: { email, senha }, auth: false }); }
   registrar(dados)         { return this.requisitar('/auth/registrar', { metodo: 'POST', corpo: dados, auth: false }); }
+  meuPerfil()              { return this.requisitar('/auth/me'); }
+  listarUsuarios()         { return this.requisitar('/auth/usuarios'); }
+  alterarPapel(id, papel)  { return this.requisitar(`/auth/usuarios/${id}/papel`, { metodo: 'PATCH', corpo: { papel } }); }
   listarProdutos()         { return this.requisitar('/estoque/produtos'); }
   criarProduto(dados)      { return this.requisitar('/estoque/produtos', { metodo: 'POST', corpo: dados }); }
   listarMovimentacoes()    { return this.requisitar('/estoque/movimentacoes'); }

@@ -1,0 +1,595 @@
+{
+  "info": {
+    "name": "A3 Estoque - Microsserviços",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Rode o sistema com `docker compose up --build` (com o .env e o firebase/service-account.json prontos) e execute em ordem. O login (Firebase Authentication) salva o token sozinho."
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080/api"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "refreshToken",
+      "value": ""
+    },
+    {
+      "key": "produtoId",
+      "value": "1"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Auth (login separado)",
+      "item": [
+        {
+          "name": "Registrar",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/registrar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "registrar"
+              ]
+            },
+            "description": "O primeiro usuário vira admin.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Guilherme\",\n  \"email\": \"guilherme@a3.com\",\n  \"senha\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Criado (201) ou já existe (409)', () => pm.expect(pm.response.code).to.be.oneOf([201,409]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Salva accessToken e refreshToken nas variáveis.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"guilherme@a3.com\",\n  \"senha\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json();",
+                  "if (d.accessToken) { pm.collectionVariables.set('accessToken', d.accessToken); pm.collectionVariables.set('refreshToken', d.refreshToken); }",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Renovar token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/renovar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "renovar"
+              ]
+            },
+            "description": "Troca o refresh token por um novo par (o antigo deixa de valer).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = pm.response.json();",
+                  "if (d.accessToken) { pm.collectionVariables.set('accessToken', d.accessToken); pm.collectionVariables.set('refreshToken', d.refreshToken); }",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Meu perfil (Firestore)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Perfil do usuário logado, lido do Firestore.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Listar usuários (admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/usuarios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "usuarios"
+              ]
+            },
+            "description": "Lista os perfis da coleção usuarios do Firestore. Só admin.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Estoque",
+      "item": [
+        {
+          "name": "Criar produto (admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/estoque/produtos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "estoque",
+                "produtos"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Mouse sem fio\",\n  \"sku\": \"MOU-001\",\n  \"quantidade\": 100,\n  \"estoqueMinimo\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.collectionVariables.set('produtoId', pm.response.json().id);",
+                  "pm.test('Criado', () => pm.expect(pm.response.code).to.be.oneOf([201,409]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar produtos",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/estoque/produtos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "estoque",
+                "produtos"
+              ]
+            },
+            "description": "Veja o header X-Instancia: com várias réplicas ele muda.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "console.log('Instância que respondeu:', pm.response.headers.get('X-Instancia'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Entrada de estoque",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/estoque/produtos/{{produtoId}}/movimentacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "estoque",
+                "produtos",
+                "{{produtoId}}",
+                "movimentacoes"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo\": \"ENTRADA\",\n  \"quantidade\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Saída de estoque",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/estoque/produtos/{{produtoId}}/movimentacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "estoque",
+                "produtos",
+                "{{produtoId}}",
+                "movimentacoes"
+              ]
+            },
+            "description": "Deixa abaixo do mínimo e gera alerta via mensageria.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo\": \"SAIDA\",\n  \"quantidade\": 95\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Saída maior que o saldo (erro 422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/estoque/produtos/{{produtoId}}/movimentacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "estoque",
+                "produtos",
+                "{{produtoId}}",
+                "movimentacoes"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo\": \"SAIDA\",\n  \"quantidade\": 9999\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Recusado com 422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Histórico de movimentações",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/estoque/movimentacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "estoque",
+                "movimentacoes"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Alertas (mensageria)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/estoque/notificacoes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "estoque",
+                "notificacoes"
+              ]
+            },
+            "description": "Gerados pelo notificacao-worker a partir da tabela outbox.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Segurança",
+      "item": [
+        {
+          "name": "Sem token (erro 401)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/estoque/produtos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "estoque",
+                "produtos"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
